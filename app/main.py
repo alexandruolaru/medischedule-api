@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from app.routers.doctors import router as doctors_router
 from app.routers.patients import router as patients_router
 
 
@@ -18,3 +19,4 @@ def home():
 
 
 app.include_router(patients_router)
+app.include_router(doctors_router)
