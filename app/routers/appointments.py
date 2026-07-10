@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from datetime import datetime, timezone
 
 from app.database import get_database_session
 from app.models import (
@@ -41,13 +42,17 @@ def validate_appointment_relations(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Doctor not found",
         )
-
     if payload.ends_at <= payload.starts_at:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="ends_at must be after starts_at",
         )
 
+    if payload.starts_at <= datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="starts_at must be in the future",
+        )
 
 def appointment_overlaps(
     database: Session,

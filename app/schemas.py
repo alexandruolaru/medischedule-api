@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from enum import Enum
 
 class PatientBase(BaseModel):
     first_name: str = Field(min_length=2, max_length=100)
@@ -70,16 +71,18 @@ class DoctorListResponse(BaseModel):
     limit: int
     offset: int
 
+class AppointmentStatus(str, Enum):
+    scheduled = "scheduled"
+    confirmed = "confirmed"
+    completed = "completed"
+    cancelled = "cancelled"
+
 class AppointmentBase(BaseModel):
     patient_id: int
     doctor_id: int
     starts_at: datetime
     ends_at: datetime
-    status: str = Field(
-        default="scheduled",
-        min_length=2,
-        max_length=30,
-    )
+    status: AppointmentStatus = AppointmentStatus.scheduled
     notes: str | None = Field(
         default=None,
         max_length=500,
