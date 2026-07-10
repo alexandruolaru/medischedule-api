@@ -69,3 +69,41 @@ class DoctorListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+class AppointmentBase(BaseModel):
+    patient_id: int
+    doctor_id: int
+    starts_at: datetime
+    ends_at: datetime
+    status: str = Field(
+        default="scheduled",
+        min_length=2,
+        max_length=30,
+    )
+    notes: str | None = Field(
+        default=None,
+        max_length=500,
+    )
+
+
+class AppointmentCreate(AppointmentBase):
+    pass
+
+
+class AppointmentUpdate(AppointmentBase):
+    pass
+
+
+class Appointment(AppointmentBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AppointmentListResponse(BaseModel):
+    items: list[Appointment]
+    total: int
+    limit: int
+    offset: int
