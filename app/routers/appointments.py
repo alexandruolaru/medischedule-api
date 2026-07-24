@@ -253,7 +253,7 @@ def create_appointment(
             "description": "Appointment, patient or doctor not found",
         },
         409: {
-            "description": "Appointment overlaps another appointment",
+            "description": "Appointment cannot be updated",
         },
     },
 )
@@ -268,6 +268,18 @@ def update_appointment(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Appointment not found",
+        )
+
+    if appointment.status == "cancelled":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cancelled appointment cannot be updated",
+        )
+
+    if appointment.status == "completed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Completed appointment cannot be updated",
         )
 
     validate_appointment_relations(payload, database)
