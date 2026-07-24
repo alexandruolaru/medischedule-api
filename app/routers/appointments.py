@@ -15,10 +15,10 @@ from app.schemas import (
     Appointment,
     AppointmentCreate,
     AppointmentListResponse,
+    AppointmentReschedule,
     AppointmentStatus,
     AppointmentUpdate,
 )
-
 
 router = APIRouter(
     prefix="/appointments",
@@ -302,6 +302,104 @@ def update_appointment(
     appointment.ends_at = payload.ends_at
     appointment.status = payload.status.value
     appointment.notes = payload.notes
+
+    database.commit()
+    database.refresh(appointment)
+
+    return appointment
+
+
+
+@router.patch(
+    "/{appointment_id}/reschedule",
+
+    response_model=Appointment,
+    responses={
+        404: {
+            "description": "Appointment not found",
+        },
+        409: {
+            "description": "Appointment cannot be rescheduled",
+        },
+        422: {
+            "description": "Invalid appointment interval",
+        },
+    },
+)
+def reschedule_appointment(
+    appointment_id: int,
+    payload: AppointmentReschedule,
+    database: Session = Depends(get_database_session),
+):
+    appointment = database.get(AppointmentModel, appointment_id)
+
+    if appointment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Appointment not found",
+        )
+
+    if appointment.status == "cancelled":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cancelled appointment cannot be rescheduled",
+        )
+
+    if appointment.status == "completed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Completed appointment cannot be rescheduled",
+        )
+
+    if payload.ends_at <= payload.starts_at:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="ends_at must be after starts_at",
+        )
+
+    if payload.starts_at <= datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="starts_at must be in the future",
+        )
+
+    if payload.starts_at.date() != payload.ends_at.date():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Appointment must start and end on the same day",
+        )
+
+    weekday = payload.starts_at.weekday()
+    starts_at_time = payload.starts_at.timetz().replace(tzinfo=None)
+    ends_at_time = payload.ends_at.timetz().replace(tzinfo=None)
+
+    schedule_query = select(DoctorScheduleModel.id).where(
+        DoctorScheduleModel.doctor_id == appointment.doctor_id,
+        DoctorScheduleModel.weekday == weekday,
+        DoctorScheduleModel.work_start <= starts_at_time,
+        DoctorScheduleModel.work_end >= ends_at_time,
+    )
+
+    if database.scalar(schedule_query) is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Appointment is outside the doctor's schedule",
+        )
+
+    if appointment_overlaps(
+        database=database,
+        doctor_id=appointment.doctor_id,
+        starts_at=payload.starts_at,
+        ends_at=payload.ends_at,
+        exclude_appointment_id=appointment_id,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Doctor already has an overlapping appointment",
+        )
+
+    appointment.starts_at = payload.starts_at
+    appointment.ends_at = payload.ends_at
 
     database.commit()
     database.refresh(appointment)

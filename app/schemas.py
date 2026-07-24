@@ -97,6 +97,12 @@ class AppointmentUpdate(AppointmentBase):
     pass
 
 
+
+class AppointmentReschedule(BaseModel):
+    starts_at: datetime
+    ends_at: datetime
+
+
 class Appointment(AppointmentBase):
     id: int
     created_at: datetime
