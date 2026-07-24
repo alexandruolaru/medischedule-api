@@ -4,14 +4,19 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_database_session
-from app.models import Doctor as DoctorModel
+from app.models import (
+    Appointment as AppointmentModel,
+    Doctor as DoctorModel,
+)
 from app.schemas import (
     Doctor,
+    DoctorAvailabilityResponse,
     DoctorCreate,
     DoctorListResponse,
     DoctorUpdate,
 )
-
+from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 router = APIRouter(
     prefix="/doctors",
@@ -72,7 +77,109 @@ def get_doctors(
         "limit": limit,
         "offset": offset,
     }
+@router.get(
+    "/{doctor_id}/availability",
+    response_model=DoctorAvailabilityResponse,
+    responses={
+        404: {
+            "description": "Doctor not found",
+        }
+    },
+)
+def get_doctor_availability(
+    doctor_id: int,
+    availability_date: date = Query(
+        alias="date",
+        description="Date for which availability is calculated",
+    ),
+    work_start: time = Query(
+        default=time(9, 0),
+        description="Doctor workday start time",
+    ),
+    work_end: time = Query(
+        default=time(17, 0),
+        description="Doctor workday end time",
+    ),
+    slot_minutes: int = Query(
+        default=30,
+        ge=5,
+        le=240,
+        description="Duration of one appointment slot",
+    ),
+    database: Session = Depends(get_database_session),
+):
+    doctor = database.get(DoctorModel, doctor_id)
 
+    if doctor is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Doctor not found",
+        )
+
+    if work_end <= work_start:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="work_end must be after work_start",
+        )
+
+    timezone = ZoneInfo("Europe/Bucharest")
+
+    workday_start = datetime.combine(
+        availability_date,
+        work_start,
+        tzinfo=timezone,
+    )
+
+    workday_end = datetime.combine(
+        availability_date,
+        work_end,
+        tzinfo=timezone,
+    )
+
+    appointments_query = (
+        select(AppointmentModel)
+        .where(
+            AppointmentModel.doctor_id == doctor_id,
+            AppointmentModel.status != "cancelled",
+            AppointmentModel.starts_at < workday_end,
+            AppointmentModel.ends_at > workday_start,
+        )
+        .order_by(AppointmentModel.starts_at.asc())
+    )
+
+    appointments = list(
+        database.scalars(appointments_query).all()
+    )
+
+    available_slots = []
+    current_start = workday_start
+    slot_duration = timedelta(minutes=slot_minutes)
+
+    while current_start + slot_duration <= workday_end:
+        current_end = current_start + slot_duration
+
+        overlaps = any(
+            appointment.starts_at < current_end
+            and appointment.ends_at > current_start
+            for appointment in appointments
+        )
+
+        if not overlaps:
+            available_slots.append(
+                {
+                    "starts_at": current_start,
+                    "ends_at": current_end,
+                }
+            )
+
+        current_start = current_end
+
+    return {
+        "doctor_id": doctor_id,
+        "date": availability_date.isoformat(),
+        "slot_minutes": slot_minutes,
+        "available_slots": available_slots,
+    }
 
 @router.get(
     "/{doctor_id}",

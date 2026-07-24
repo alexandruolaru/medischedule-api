@@ -110,3 +110,13 @@ class AppointmentListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+class AvailabilitySlot(BaseModel):
+    starts_at: datetime
+    ends_at: datetime
+
+
+class DoctorAvailabilityResponse(BaseModel):
+    doctor_id: int
+    date: str
+    slot_minutes: int
+    available_slots: list[AvailabilitySlot]
