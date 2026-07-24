@@ -8,6 +8,7 @@ from app.database import get_database_session
 from app.models import (
     Appointment as AppointmentModel,
     Doctor as DoctorModel,
+    DoctorSchedule as DoctorScheduleModel,
     Patient as PatientModel,
 )
 from app.schemas import (
@@ -57,6 +58,28 @@ def validate_appointment_relations(
             detail="starts_at must be in the future",
         )
 
+    if payload.starts_at.date() != payload.ends_at.date():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Appointment must start and end on the same day",
+        )
+
+    weekday = payload.starts_at.weekday()
+    starts_at_time = payload.starts_at.timetz().replace(tzinfo=None)
+    ends_at_time = payload.ends_at.timetz().replace(tzinfo=None)
+
+    schedule_query = select(DoctorScheduleModel.id).where(
+        DoctorScheduleModel.doctor_id == payload.doctor_id,
+        DoctorScheduleModel.weekday == weekday,
+        DoctorScheduleModel.work_start <= starts_at_time,
+        DoctorScheduleModel.work_end >= ends_at_time,
+    )
+
+    if database.scalar(schedule_query) is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Appointment is outside the doctor's schedule",
+        )
 
 def appointment_overlaps(
     database: Session,
@@ -66,9 +89,10 @@ def appointment_overlaps(
     exclude_appointment_id: int | None = None,
 ) -> bool:
     query = select(AppointmentModel.id).where(
-        AppointmentModel.doctor_id == doctor_id,
-        AppointmentModel.starts_at < ends_at,
-        AppointmentModel.ends_at > starts_at,
+    AppointmentModel.doctor_id == doctor_id,
+    AppointmentModel.status != "cancelled",
+    AppointmentModel.starts_at < ends_at,
+    AppointmentModel.ends_at > starts_at,
     )
 
     if exclude_appointment_id is not None:
