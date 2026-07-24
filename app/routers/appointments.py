@@ -456,7 +456,10 @@ def complete_appointment(
     responses={
         404: {
             "description": "Appointment not found",
-        }
+        },
+        409: {
+            "description": "Completed appointment cannot be deleted",
+        },
     },
 )
 def delete_appointment(
@@ -469,6 +472,12 @@ def delete_appointment(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Appointment not found",
+        )
+
+    if appointment.status == "completed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Completed appointment cannot be deleted",
         )
 
     database.delete(appointment)
