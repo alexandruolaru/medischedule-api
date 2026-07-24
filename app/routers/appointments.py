@@ -296,6 +296,42 @@ def update_appointment(
 
     return appointment
 
+@router.patch(
+    "/{appointment_id}/cancel",
+    response_model=Appointment,
+    responses={
+        404: {
+            "description": "Appointment not found",
+        },
+        409: {
+            "description": "Appointment is already cancelled",
+        },
+    },
+)
+def cancel_appointment(
+    appointment_id: int,
+    database: Session = Depends(get_database_session),
+):
+    appointment = database.get(AppointmentModel, appointment_id)
+
+    if appointment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Appointment not found",
+        )
+
+    if appointment.status == "cancelled":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Appointment is already cancelled",
+        )
+
+    appointment.status = "cancelled"
+
+    database.commit()
+    database.refresh(appointment)
+
+    return appointment
 
 @router.delete(
     "/{appointment_id}",
