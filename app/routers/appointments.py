@@ -1,7 +1,8 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone
 
 from app.database import get_database_session
 from app.models import (
@@ -13,6 +14,7 @@ from app.schemas import (
     Appointment,
     AppointmentCreate,
     AppointmentListResponse,
+    AppointmentStatus,
     AppointmentUpdate,
 )
 
@@ -42,6 +44,7 @@ def validate_appointment_relations(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Doctor not found",
         )
+
     if payload.ends_at <= payload.starts_at:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -54,11 +57,12 @@ def validate_appointment_relations(
             detail="starts_at must be in the future",
         )
 
+
 def appointment_overlaps(
     database: Session,
     doctor_id: int,
-    starts_at,
-    ends_at,
+    starts_at: datetime,
+    ends_at: datetime,
     exclude_appointment_id: int | None = None,
 ) -> bool:
     query = select(AppointmentModel.id).where(
@@ -79,6 +83,18 @@ def appointment_overlaps(
 def get_appointments(
     doctor_id: int | None = Query(default=None, ge=1),
     patient_id: int | None = Query(default=None, ge=1),
+    appointment_status: AppointmentStatus | None = Query(
+        default=None,
+        description="Filter by appointment status",
+    ),
+    date_from: datetime | None = Query(
+        default=None,
+        description="Filter appointments starting from this date",
+    ),
+    date_to: datetime | None = Query(
+        default=None,
+        description="Filter appointments starting before this date",
+    ),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     database: Session = Depends(get_database_session),
@@ -86,10 +102,29 @@ def get_appointments(
     filters = []
 
     if doctor_id is not None:
-        filters.append(AppointmentModel.doctor_id == doctor_id)
+        filters.append(
+            AppointmentModel.doctor_id == doctor_id
+        )
 
     if patient_id is not None:
-        filters.append(AppointmentModel.patient_id == patient_id)
+        filters.append(
+            AppointmentModel.patient_id == patient_id
+        )
+
+    if appointment_status is not None:
+        filters.append(
+            AppointmentModel.status == appointment_status.value
+        )
+
+    if date_from is not None:
+        filters.append(
+            AppointmentModel.starts_at >= date_from
+        )
+
+    if date_to is not None:
+        filters.append(
+            AppointmentModel.starts_at <= date_to
+        )
 
     query = select(AppointmentModel)
     count_query = select(func.count()).select_from(AppointmentModel)
@@ -175,7 +210,7 @@ def create_appointment(
         doctor_id=payload.doctor_id,
         starts_at=payload.starts_at,
         ends_at=payload.ends_at,
-        status=payload.status,
+        status=payload.status.value,
         notes=payload.notes,
     )
 
@@ -229,7 +264,7 @@ def update_appointment(
     appointment.doctor_id = payload.doctor_id
     appointment.starts_at = payload.starts_at
     appointment.ends_at = payload.ends_at
-    appointment.status = payload.status
+    appointment.status = payload.status.value
     appointment.notes = payload.notes
 
     database.commit()
