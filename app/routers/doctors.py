@@ -7,12 +7,16 @@ from app.database import get_database_session
 from app.models import (
     Appointment as AppointmentModel,
     Doctor as DoctorModel,
+    DoctorSchedule as DoctorScheduleModel,
 )
 from app.schemas import (
     Doctor,
     DoctorAvailabilityResponse,
     DoctorCreate,
     DoctorListResponse,
+    DoctorSchedule,
+    DoctorScheduleCreate,
+    DoctorScheduleListResponse,
     DoctorUpdate,
 )
 from datetime import date, datetime, time, timedelta
@@ -78,11 +82,104 @@ def get_doctors(
         "offset": offset,
     }
 @router.get(
+    "/{doctor_id}/schedules",
+    response_model=DoctorScheduleListResponse,
+    responses={
+        404: {
+            "description": "Doctor not found",
+        }
+    },
+)
+def get_doctor_schedules(
+    doctor_id: int,
+    database: Session = Depends(get_database_session),
+):
+    doctor = database.get(DoctorModel, doctor_id)
+
+    if doctor is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Doctor not found",
+        )
+
+    query = (
+        select(DoctorScheduleModel)
+        .where(DoctorScheduleModel.doctor_id == doctor_id)
+        .order_by(
+            DoctorScheduleModel.weekday.asc(),
+            DoctorScheduleModel.work_start.asc(),
+        )
+    )
+
+    schedules = list(database.scalars(query).all())
+
+    return {
+        "doctor_id": doctor_id,
+        "schedules": schedules,
+    }
+@router.post(
+    "/{doctor_id}/schedules",
+    response_model=DoctorSchedule,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        404: {
+            "description": "Doctor not found",
+        },
+        409: {
+            "description": "Schedule overlaps an existing interval",
+        },
+    },
+)
+def create_doctor_schedule(
+    doctor_id: int,
+    payload: DoctorScheduleCreate,
+    database: Session = Depends(get_database_session),
+):
+    doctor = database.get(DoctorModel, doctor_id)
+
+    if doctor is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Doctor not found",
+        )
+
+    if payload.work_end <= payload.work_start:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="work_end must be after work_start",
+        )
+
+    overlap_query = select(DoctorScheduleModel.id).where(
+        DoctorScheduleModel.doctor_id == doctor_id,
+        DoctorScheduleModel.weekday == payload.weekday,
+        DoctorScheduleModel.work_start < payload.work_end,
+        DoctorScheduleModel.work_end > payload.work_start,
+    )
+
+    if database.scalar(overlap_query) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Schedule overlaps an existing interval",
+        )
+
+    schedule = DoctorScheduleModel(
+        doctor_id=doctor_id,
+        weekday=payload.weekday,
+        work_start=payload.work_start,
+        work_end=payload.work_end,
+    )
+
+    database.add(schedule)
+    database.commit()
+    database.refresh(schedule)
+
+    return schedule
+@router.get(
     "/{doctor_id}/availability",
     response_model=DoctorAvailabilityResponse,
     responses={
         404: {
-            "description": "Doctor not found",
+            "description": "Doctor or schedule not found",
         }
     },
 )
@@ -91,14 +188,6 @@ def get_doctor_availability(
     availability_date: date = Query(
         alias="date",
         description="Date for which availability is calculated",
-    ),
-    work_start: time = Query(
-        default=time(9, 0),
-        description="Doctor workday start time",
-    ),
-    work_end: time = Query(
-        default=time(17, 0),
-        description="Doctor workday end time",
     ),
     slot_minutes: int = Query(
         default=30,
@@ -116,23 +205,38 @@ def get_doctor_availability(
             detail="Doctor not found",
         )
 
-    if work_end <= work_start:
+    weekday = availability_date.weekday()
+
+    schedule_query = (
+        select(DoctorScheduleModel)
+        .where(
+            DoctorScheduleModel.doctor_id == doctor_id,
+            DoctorScheduleModel.weekday == weekday,
+        )
+        .order_by(DoctorScheduleModel.work_start.asc())
+    )
+
+    schedules = list(database.scalars(schedule_query).all())
+
+    if not schedules:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="work_end must be after work_start",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Doctor has no schedule for this day",
         )
 
     timezone = ZoneInfo("Europe/Bucharest")
+    slot_duration = timedelta(minutes=slot_minutes)
+    available_slots = []
 
-    workday_start = datetime.combine(
+    day_start = datetime.combine(
         availability_date,
-        work_start,
+        time.min,
         tzinfo=timezone,
     )
 
-    workday_end = datetime.combine(
+    day_end = datetime.combine(
         availability_date,
-        work_end,
+        time.max,
         tzinfo=timezone,
     )
 
@@ -141,8 +245,8 @@ def get_doctor_availability(
         .where(
             AppointmentModel.doctor_id == doctor_id,
             AppointmentModel.status != "cancelled",
-            AppointmentModel.starts_at < workday_end,
-            AppointmentModel.ends_at > workday_start,
+            AppointmentModel.starts_at < day_end,
+            AppointmentModel.ends_at > day_start,
         )
         .order_by(AppointmentModel.starts_at.asc())
     )
@@ -151,28 +255,39 @@ def get_doctor_availability(
         database.scalars(appointments_query).all()
     )
 
-    available_slots = []
-    current_start = workday_start
-    slot_duration = timedelta(minutes=slot_minutes)
-
-    while current_start + slot_duration <= workday_end:
-        current_end = current_start + slot_duration
-
-        overlaps = any(
-            appointment.starts_at < current_end
-            and appointment.ends_at > current_start
-            for appointment in appointments
+    for schedule in schedules:
+        workday_start = datetime.combine(
+            availability_date,
+            schedule.work_start,
+            tzinfo=timezone,
         )
 
-        if not overlaps:
-            available_slots.append(
-                {
-                    "starts_at": current_start,
-                    "ends_at": current_end,
-                }
+        workday_end = datetime.combine(
+            availability_date,
+            schedule.work_end,
+            tzinfo=timezone,
+        )
+
+        current_start = workday_start
+
+        while current_start + slot_duration <= workday_end:
+            current_end = current_start + slot_duration
+
+            overlaps = any(
+                appointment.starts_at < current_end
+                and appointment.ends_at > current_start
+                for appointment in appointments
             )
 
-        current_start = current_end
+            if not overlaps:
+                available_slots.append(
+                    {
+                        "starts_at": current_start,
+                        "ends_at": current_end,
+                    }
+                )
+
+            current_start = current_end
 
     return {
         "doctor_id": doctor_id,

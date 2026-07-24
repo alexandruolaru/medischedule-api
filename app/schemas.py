@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -120,3 +120,27 @@ class DoctorAvailabilityResponse(BaseModel):
     date: str
     slot_minutes: int
     available_slots: list[AvailabilitySlot]
+class DoctorScheduleBase(BaseModel):
+    weekday: int = Field(
+        ge=0,
+        le=6,
+        description="0 = Monday, 6 = Sunday",
+    )
+    work_start: time
+    work_end: time
+
+
+class DoctorScheduleCreate(DoctorScheduleBase):
+    pass
+
+
+class DoctorSchedule(DoctorScheduleBase):
+    id: int
+    doctor_id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DoctorScheduleListResponse(BaseModel):
+    doctor_id: int
+    schedules: list[DoctorSchedule]

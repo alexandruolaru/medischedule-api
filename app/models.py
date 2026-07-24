@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import datetime, time
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import DateTime, ForeignKey, String, Time, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -94,6 +94,33 @@ class Doctor(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )  
+class DoctorSchedule(Base):
+    __tablename__ = "doctor_schedules"
+
+    id: Mapped[int] = mapped_column(
+        primary_key=True,
+        index=True,
+    )
+
+    doctor_id: Mapped[int] = mapped_column(
+        ForeignKey("doctors.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    weekday: Mapped[int] = mapped_column(
+        nullable=False,
+    )
+
+    work_start: Mapped[time] = mapped_column(
+        Time(),
+        nullable=False,
+    )
+
+    work_end: Mapped[time] = mapped_column(
+        Time(),
+        nullable=False,
+    )   
 class Appointment(Base):
     __tablename__ = "appointments"
 
