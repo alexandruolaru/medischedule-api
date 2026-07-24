@@ -17,6 +17,7 @@ from app.schemas import (
     DoctorSchedule,
     DoctorScheduleCreate,
     DoctorScheduleListResponse,
+    DoctorScheduleUpdate,
     DoctorUpdate,
 )
 from datetime import date, datetime, time, timedelta
@@ -174,6 +175,101 @@ def create_doctor_schedule(
     database.refresh(schedule)
 
     return schedule
+
+@router.put(
+    "/{doctor_id}/schedules/{schedule_id}",
+    response_model=DoctorSchedule,
+    responses={
+        404: {
+            "description": "Doctor or schedule not found",
+        },
+        409: {
+            "description": "Schedule overlaps an existing interval",
+        },
+    },
+)
+def update_doctor_schedule(
+    doctor_id: int,
+    schedule_id: int,
+    payload: DoctorScheduleUpdate,
+    database: Session = Depends(get_database_session),
+):
+    doctor = database.get(DoctorModel, doctor_id)
+
+    if doctor is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Doctor not found",
+        )
+
+    schedule = database.get(DoctorScheduleModel, schedule_id)
+
+    if schedule is None or schedule.doctor_id != doctor_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Schedule not found",
+        )
+
+    if payload.work_end <= payload.work_start:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="work_end must be after work_start",
+        )
+
+    overlap_query = select(DoctorScheduleModel.id).where(
+        DoctorScheduleModel.doctor_id == doctor_id,
+        DoctorScheduleModel.weekday == payload.weekday,
+        DoctorScheduleModel.work_start < payload.work_end,
+        DoctorScheduleModel.work_end > payload.work_start,
+        DoctorScheduleModel.id != schedule_id,
+    )
+
+    if database.scalar(overlap_query) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Schedule overlaps an existing interval",
+        )
+
+    schedule.weekday = payload.weekday
+    schedule.work_start = payload.work_start
+    schedule.work_end = payload.work_end
+
+    database.commit()
+    database.refresh(schedule)
+
+    return schedule
+@router.delete(
+    "/{doctor_id}/schedules/{schedule_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        404: {
+            "description": "Doctor or schedule not found",
+        }
+    },
+)
+def delete_doctor_schedule(
+    doctor_id: int,
+    schedule_id: int,
+    database: Session = Depends(get_database_session),
+):
+    doctor = database.get(DoctorModel, doctor_id)
+
+    if doctor is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Doctor not found",
+        )
+
+    schedule = database.get(DoctorScheduleModel, schedule_id)
+
+    if schedule is None or schedule.doctor_id != doctor_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Schedule not found",
+        )
+
+    database.delete(schedule)
+    database.commit()
 @router.get(
     "/{doctor_id}/availability",
     response_model=DoctorAvailabilityResponse,

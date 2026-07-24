@@ -133,6 +133,8 @@ class DoctorScheduleBase(BaseModel):
 class DoctorScheduleCreate(DoctorScheduleBase):
     pass
 
+class DoctorScheduleUpdate(DoctorScheduleBase):
+    pass
 
 class DoctorSchedule(DoctorScheduleBase):
     id: int
