@@ -308,6 +308,7 @@ def update_appointment(
         },
     },
 )
+
 def cancel_appointment(
     appointment_id: int,
     database: Session = Depends(get_database_session),
@@ -324,6 +325,12 @@ def cancel_appointment(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Appointment is already cancelled",
+        )
+
+    if appointment.status == "completed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Completed appointment cannot be cancelled",
         )
 
     appointment.status = "cancelled"
