@@ -333,6 +333,55 @@ def cancel_appointment(
 
     return appointment
 
+@router.patch(
+    "/{appointment_id}/confirm",
+    response_model=Appointment,
+    responses={
+        404: {
+            "description": "Appointment not found",
+        },
+        409: {
+            "description": "Appointment cannot be confirmed",
+        },
+    },
+)
+def confirm_appointment(
+    appointment_id: int,
+    database: Session = Depends(get_database_session),
+):
+    appointment = database.get(AppointmentModel, appointment_id)
+
+    if appointment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Appointment not found",
+        )
+
+    if appointment.status == "confirmed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Appointment is already confirmed",
+        )
+
+    if appointment.status == "cancelled":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cancelled appointment cannot be confirmed",
+        )
+
+    if appointment.status == "completed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Completed appointment cannot be confirmed",
+        )
+
+    appointment.status = "confirmed"
+
+    database.commit()
+    database.refresh(appointment)
+
+    return appointment
+
 @router.delete(
     "/{appointment_id}",
     status_code=status.HTTP_204_NO_CONTENT,
