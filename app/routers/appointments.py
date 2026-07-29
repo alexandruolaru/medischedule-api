@@ -85,6 +85,7 @@ def validate_appointment_can_be_changed(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Completed appointment cannot be {action}",
         )   
+    
 def validate_appointment_can_be_deleted(
     appointment: AppointmentModel,
 ) -> None:
@@ -93,6 +94,7 @@ def validate_appointment_can_be_deleted(
             status_code=status.HTTP_409_CONFLICT,
             detail="Completed appointment cannot be deleted",
         )
+    
 def get_appointment_or_404(
     database: Session,
     appointment_id: int,
@@ -105,7 +107,8 @@ def get_appointment_or_404(
             detail="Appointment not found",
         )
 
-    return appointment    
+    return appointment  
+  
 def save_appointment(
     database: Session,
     appointment: AppointmentModel,
@@ -180,6 +183,7 @@ def validate_appointment_relations(
         starts_at=payload.starts_at,
         ends_at=payload.ends_at,
     )
+    
 def appointment_overlaps(
     database: Session,
     doctor_id: int,
