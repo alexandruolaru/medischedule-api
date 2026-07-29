@@ -438,11 +438,10 @@ def cancel_appointment(
             detail="Appointment is already cancelled",
         )
 
-    if appointment.status == "completed":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Completed appointment cannot be cancelled",
-        )
+    validate_appointment_can_be_changed(
+        appointment=appointment,
+        action="cancelled",
+    )
 
     appointment.status = "cancelled"
 
