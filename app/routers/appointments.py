@@ -114,6 +114,19 @@ def save_appointment(
     database.refresh(appointment)
 
     return appointment
+
+def change_appointment_status(
+    database: Session,
+    appointment: AppointmentModel,
+    new_status: str,
+) -> AppointmentModel:
+    appointment.status = new_status
+
+    return save_appointment(
+        database=database,
+        appointment=appointment,
+    )
+
 def validate_appointment_relations(
     payload: AppointmentCreate | AppointmentUpdate,
     database: Session,
@@ -466,11 +479,10 @@ def cancel_appointment(
         action="cancelled",
     )
 
-    appointment.status = "cancelled"
-
-    return save_appointment(
+    return change_appointment_status(
         database=database,
         appointment=appointment,
+        new_status="cancelled",
     )
 
 @router.patch(
@@ -506,13 +518,11 @@ def confirm_appointment(
         action="confirmed",
     )
 
-    appointment.status = "confirmed"
-
-    return save_appointment(
+    return change_appointment_status(
         database=database,
         appointment=appointment,
+        new_status="confirmed",
     )
-
 @router.patch(
     "/{appointment_id}/complete",
     response_model=Appointment,
@@ -552,11 +562,10 @@ def complete_appointment(
             detail="Only confirmed appointments can be completed",
         )
 
-    appointment.status = "completed"
-
-    return save_appointment(
+    return change_appointment_status(
         database=database,
         appointment=appointment,
+        new_status="completed",
     )
 
 @router.delete(
