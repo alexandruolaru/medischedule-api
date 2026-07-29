@@ -106,6 +106,14 @@ def get_appointment_or_404(
         )
 
     return appointment    
+def save_appointment(
+    database: Session,
+    appointment: AppointmentModel,
+) -> AppointmentModel:
+    database.commit()
+    database.refresh(appointment)
+
+    return appointment
 def validate_appointment_relations(
     payload: AppointmentCreate | AppointmentUpdate,
     database: Session,
@@ -308,10 +316,11 @@ def create_appointment(
     )
 
     database.add(appointment)
-    database.commit()
-    database.refresh(appointment)
 
-    return appointment
+    return save_appointment(
+        database=database,
+        appointment=appointment,
+    )
 
 @router.put(
     "/{appointment_id}",
@@ -358,10 +367,10 @@ def update_appointment(
     appointment.status = payload.status.value
     appointment.notes = payload.notes
 
-    database.commit()
-    database.refresh(appointment)
-
-    return appointment
+    return save_appointment(
+        database=database,
+        appointment=appointment,
+    )
 
 @router.patch(
     "/{appointment_id}/reschedule",
@@ -378,6 +387,7 @@ def update_appointment(
         },
     },
 )
+
 
 def reschedule_appointment(
     appointment_id: int,
@@ -417,10 +427,11 @@ def reschedule_appointment(
     appointment.starts_at = payload.starts_at
     appointment.ends_at = payload.ends_at
 
-    database.commit()
-    database.refresh(appointment)
+    return save_appointment(
+        database=database,
+        appointment=appointment,
+    )
 
-    return appointment
 
 @router.patch(
     "/{appointment_id}/cancel",
@@ -457,10 +468,10 @@ def cancel_appointment(
 
     appointment.status = "cancelled"
 
-    database.commit()
-    database.refresh(appointment)
-
-    return appointment
+    return save_appointment(
+        database=database,
+        appointment=appointment,
+    )
 
 @router.patch(
     "/{appointment_id}/confirm",
@@ -497,10 +508,10 @@ def confirm_appointment(
 
     appointment.status = "confirmed"
 
-    database.commit()
-    database.refresh(appointment)
-
-    return appointment
+    return save_appointment(
+        database=database,
+        appointment=appointment,
+    )
 
 @router.patch(
     "/{appointment_id}/complete",
@@ -543,10 +554,10 @@ def complete_appointment(
 
     appointment.status = "completed"
 
-    database.commit()
-    database.refresh(appointment)
-
-    return appointment
+    return save_appointment(
+        database=database,
+        appointment=appointment,
+    )
 
 @router.delete(
     "/{appointment_id}",
