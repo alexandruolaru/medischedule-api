@@ -70,6 +70,22 @@ def validate_doctor_schedule(
             detail="Appointment is outside the doctor's schedule",
         )
 
+def validate_appointment_can_be_changed(
+    appointment: AppointmentModel,
+    action: str,
+) -> None:
+    if appointment.status == "cancelled":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cancelled appointment cannot be {action}",
+        )
+
+    if appointment.status == "completed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Completed appointment cannot be {action}",
+        )   
+
 def validate_appointment_relations(
     payload: AppointmentCreate | AppointmentUpdate,
     database: Session,
@@ -278,6 +294,7 @@ def create_appointment(
         },
     },
 )
+
 def update_appointment(
     appointment_id: int,
     payload: AppointmentUpdate,
@@ -291,17 +308,10 @@ def update_appointment(
             detail="Appointment not found",
         )
 
-    if appointment.status == "cancelled":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Cancelled appointment cannot be updated",
-        )
-
-    if appointment.status == "completed":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Completed appointment cannot be updated",
-        )
+    validate_appointment_can_be_changed(
+        appointment=appointment,
+        action="updated",
+    )
 
     validate_appointment_relations(payload, database)
 
@@ -360,17 +370,10 @@ def reschedule_appointment(
             detail="Appointment not found",
         )
 
-    if appointment.status == "cancelled":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Cancelled appointment cannot be rescheduled",
-        )
-
-    if appointment.status == "completed":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Completed appointment cannot be rescheduled",
-        )
+    validate_appointment_can_be_changed(
+        appointment=appointment,
+        action="rescheduled",
+    )
 
     validate_appointment_interval(
         starts_at=payload.starts_at,
