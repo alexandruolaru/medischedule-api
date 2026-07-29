@@ -25,6 +25,28 @@ router = APIRouter(
     tags=["Appointments"],
 )
 
+def validate_appointment_interval(
+    starts_at: datetime,
+    ends_at: datetime,
+) -> None:
+    if ends_at <= starts_at:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="ends_at must be after starts_at",
+        )
+
+    if starts_at <= datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="starts_at must be in the future",
+        )
+
+    if starts_at.date() != ends_at.date():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Appointment must start and end on the same day",
+        )
+
 
 def validate_appointment_relations(
     payload: AppointmentCreate | AppointmentUpdate,
@@ -46,23 +68,10 @@ def validate_appointment_relations(
             detail="Doctor not found",
         )
 
-    if payload.ends_at <= payload.starts_at:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="ends_at must be after starts_at",
-        )
-
-    if payload.starts_at <= datetime.now(timezone.utc):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="starts_at must be in the future",
-        )
-
-    if payload.starts_at.date() != payload.ends_at.date():
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Appointment must start and end on the same day",
-        )
+    validate_appointment_interval(
+        starts_at=payload.starts_at,
+        ends_at=payload.ends_at,
+    )
 
     weekday = payload.starts_at.weekday()
     starts_at_time = payload.starts_at.timetz().replace(tzinfo=None)
@@ -312,7 +321,6 @@ def update_appointment(
 
 @router.patch(
     "/{appointment_id}/reschedule",
-
     response_model=Appointment,
     responses={
         404: {
@@ -326,6 +334,7 @@ def update_appointment(
         },
     },
 )
+
 def reschedule_appointment(
     appointment_id: int,
     payload: AppointmentReschedule,
@@ -351,23 +360,10 @@ def reschedule_appointment(
             detail="Completed appointment cannot be rescheduled",
         )
 
-    if payload.ends_at <= payload.starts_at:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="ends_at must be after starts_at",
-        )
-
-    if payload.starts_at <= datetime.now(timezone.utc):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="starts_at must be in the future",
-        )
-
-    if payload.starts_at.date() != payload.ends_at.date():
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Appointment must start and end on the same day",
-        )
+    validate_appointment_interval(
+        starts_at=payload.starts_at,
+        ends_at=payload.ends_at,
+    )
 
     weekday = payload.starts_at.weekday()
     starts_at_time = payload.starts_at.timetz().replace(tzinfo=None)
