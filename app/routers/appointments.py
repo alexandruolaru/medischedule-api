@@ -47,6 +47,28 @@ def validate_appointment_interval(
             detail="Appointment must start and end on the same day",
         )
 
+def validate_doctor_schedule(
+    database: Session,
+    doctor_id: int,
+    starts_at: datetime,
+    ends_at: datetime,
+) -> None:
+    weekday = starts_at.weekday()
+    starts_at_time = starts_at.timetz().replace(tzinfo=None)
+    ends_at_time = ends_at.timetz().replace(tzinfo=None)
+
+    schedule_query = select(DoctorScheduleModel.id).where(
+        DoctorScheduleModel.doctor_id == doctor_id,
+        DoctorScheduleModel.weekday == weekday,
+        DoctorScheduleModel.work_start <= starts_at_time,
+        DoctorScheduleModel.work_end >= ends_at_time,
+    )
+
+    if database.scalar(schedule_query) is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Appointment is outside the doctor's schedule",
+        )
 
 def validate_appointment_relations(
     payload: AppointmentCreate | AppointmentUpdate,
@@ -73,22 +95,12 @@ def validate_appointment_relations(
         ends_at=payload.ends_at,
     )
 
-    weekday = payload.starts_at.weekday()
-    starts_at_time = payload.starts_at.timetz().replace(tzinfo=None)
-    ends_at_time = payload.ends_at.timetz().replace(tzinfo=None)
-
-    schedule_query = select(DoctorScheduleModel.id).where(
-        DoctorScheduleModel.doctor_id == payload.doctor_id,
-        DoctorScheduleModel.weekday == weekday,
-        DoctorScheduleModel.work_start <= starts_at_time,
-        DoctorScheduleModel.work_end >= ends_at_time,
+    validate_doctor_schedule(
+        database=database,
+        doctor_id=payload.doctor_id,
+        starts_at=payload.starts_at,
+        ends_at=payload.ends_at,
     )
-
-    if database.scalar(schedule_query) is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Appointment is outside the doctor's schedule",
-        )
 
 def appointment_overlaps(
     database: Session,
@@ -365,22 +377,12 @@ def reschedule_appointment(
         ends_at=payload.ends_at,
     )
 
-    weekday = payload.starts_at.weekday()
-    starts_at_time = payload.starts_at.timetz().replace(tzinfo=None)
-    ends_at_time = payload.ends_at.timetz().replace(tzinfo=None)
-
-    schedule_query = select(DoctorScheduleModel.id).where(
-        DoctorScheduleModel.doctor_id == appointment.doctor_id,
-        DoctorScheduleModel.weekday == weekday,
-        DoctorScheduleModel.work_start <= starts_at_time,
-        DoctorScheduleModel.work_end >= ends_at_time,
+    validate_doctor_schedule(
+        database=database,
+        doctor_id=appointment.doctor_id,
+        starts_at=payload.starts_at,
+        ends_at=payload.ends_at,
     )
-
-    if database.scalar(schedule_query) is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Appointment is outside the doctor's schedule",
-        )
 
     if appointment_overlaps(
         database=database,
