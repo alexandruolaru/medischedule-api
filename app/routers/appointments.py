@@ -159,6 +159,24 @@ def appointment_overlaps(
 
     return database.scalar(query) is not None
 
+def validate_appointment_overlap(
+    database: Session,
+    doctor_id: int,
+    starts_at: datetime,
+    ends_at: datetime,
+    exclude_appointment_id: int | None = None,
+) -> None:
+    if appointment_overlaps(
+        database=database,
+        doctor_id=doctor_id,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        exclude_appointment_id=exclude_appointment_id,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Doctor already has an overlapping appointment",
+        )
 
 @router.get("", response_model=AppointmentListResponse)
 def get_appointments(
@@ -266,22 +284,19 @@ def get_appointment(
         },
     },
 )
+
 def create_appointment(
     payload: AppointmentCreate,
     database: Session = Depends(get_database_session),
 ):
     validate_appointment_relations(payload, database)
 
-    if appointment_overlaps(
+    validate_appointment_overlap(
         database=database,
         doctor_id=payload.doctor_id,
         starts_at=payload.starts_at,
         ends_at=payload.ends_at,
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Doctor already has an overlapping appointment",
-        )
+    )
 
     appointment = AppointmentModel(
         patient_id=payload.patient_id,
@@ -297,7 +312,6 @@ def create_appointment(
     database.refresh(appointment)
 
     return appointment
-
 
 @router.put(
     "/{appointment_id}",
@@ -329,17 +343,13 @@ def update_appointment(
 
     validate_appointment_relations(payload, database)
 
-    if appointment_overlaps(
+    validate_appointment_overlap(
         database=database,
         doctor_id=payload.doctor_id,
         starts_at=payload.starts_at,
         ends_at=payload.ends_at,
         exclude_appointment_id=appointment_id,
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Doctor already has an overlapping appointment",
-        )
+    )
 
     appointment.patient_id = payload.patient_id
     appointment.doctor_id = payload.doctor_id
@@ -396,17 +406,13 @@ def reschedule_appointment(
         ends_at=payload.ends_at,
     )
 
-    if appointment_overlaps(
+    validate_appointment_overlap(
         database=database,
         doctor_id=appointment.doctor_id,
         starts_at=payload.starts_at,
         ends_at=payload.ends_at,
         exclude_appointment_id=appointment_id,
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Doctor already has an overlapping appointment",
-        )
+    )
 
     appointment.starts_at = payload.starts_at
     appointment.ends_at = payload.ends_at
