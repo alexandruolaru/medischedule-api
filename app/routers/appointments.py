@@ -93,7 +93,19 @@ def validate_appointment_can_be_deleted(
             status_code=status.HTTP_409_CONFLICT,
             detail="Completed appointment cannot be deleted",
         )
-    
+def get_appointment_or_404(
+    database: Session,
+    appointment_id: int,
+) -> AppointmentModel:
+    appointment = database.get(AppointmentModel, appointment_id)
+
+    if appointment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Appointment not found",
+        )
+
+    return appointment    
 def validate_appointment_relations(
     payload: AppointmentCreate | AppointmentUpdate,
     database: Session,
@@ -229,20 +241,17 @@ def get_appointments(
         }
     },
 )
+
 def get_appointment(
     appointment_id: int,
     database: Session = Depends(get_database_session),
 ):
-    appointment = database.get(AppointmentModel, appointment_id)
-
-    if appointment is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Appointment not found",
-        )
+    appointment = get_appointment_or_404(
+        database=database,
+        appointment_id=appointment_id,
+    )
 
     return appointment
-
 
 @router.post(
     "",
@@ -308,13 +317,10 @@ def update_appointment(
     payload: AppointmentUpdate,
     database: Session = Depends(get_database_session),
 ):
-    appointment = database.get(AppointmentModel, appointment_id)
-
-    if appointment is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Appointment not found",
-        )
+    appointment = get_appointment_or_404(
+        database=database,
+        appointment_id=appointment_id,
+    )
 
     validate_appointment_can_be_changed(
         appointment=appointment,
@@ -347,8 +353,6 @@ def update_appointment(
 
     return appointment
 
-
-
 @router.patch(
     "/{appointment_id}/reschedule",
     response_model=Appointment,
@@ -370,13 +374,10 @@ def reschedule_appointment(
     payload: AppointmentReschedule,
     database: Session = Depends(get_database_session),
 ):
-    appointment = database.get(AppointmentModel, appointment_id)
-
-    if appointment is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Appointment not found",
-        )
+    appointment = get_appointment_or_404(
+        database=database,
+        appointment_id=appointment_id,
+    )
 
     validate_appointment_can_be_changed(
         appointment=appointment,
@@ -432,13 +433,10 @@ def cancel_appointment(
     appointment_id: int,
     database: Session = Depends(get_database_session),
 ):
-    appointment = database.get(AppointmentModel, appointment_id)
-
-    if appointment is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Appointment not found",
-        )
+    appointment = get_appointment_or_404(
+        database=database,
+        appointment_id=appointment_id,
+    )
 
     if appointment.status == "cancelled":
         raise HTTPException(
@@ -475,13 +473,10 @@ def confirm_appointment(
     appointment_id: int,
     database: Session = Depends(get_database_session),
 ):
-    appointment = database.get(AppointmentModel, appointment_id)
-
-    if appointment is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Appointment not found",
-        )
+    appointment = get_appointment_or_404(
+        database=database,
+        appointment_id=appointment_id,
+    )
 
     if appointment.status == "confirmed":
         raise HTTPException(
@@ -518,13 +513,10 @@ def complete_appointment(
     appointment_id: int,
     database: Session = Depends(get_database_session),
 ):
-    appointment = database.get(AppointmentModel, appointment_id)
-
-    if appointment is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Appointment not found",
-        )
+    appointment = get_appointment_or_404(
+        database=database,
+        appointment_id=appointment_id,
+    )
 
     if appointment.status == "completed":
         raise HTTPException(
@@ -567,13 +559,10 @@ def delete_appointment(
     appointment_id: int,
     database: Session = Depends(get_database_session),
 ):
-    appointment = database.get(AppointmentModel, appointment_id)
-
-    if appointment is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Appointment not found",
-        )
+    appointment = get_appointment_or_404(
+        database=database,
+        appointment_id=appointment_id,
+    )
 
     validate_appointment_can_be_deleted(appointment)
 
