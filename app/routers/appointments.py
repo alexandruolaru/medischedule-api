@@ -127,11 +127,11 @@ def change_appointment_status(
         appointment=appointment,
     )
 
-def validate_appointment_relations(
-    payload: AppointmentCreate | AppointmentUpdate,
+def get_patient_or_404(
     database: Session,
-) -> None:
-    patient = database.get(PatientModel, payload.patient_id)
+    patient_id: int,
+) -> PatientModel:
+    patient = database.get(PatientModel, patient_id)
 
     if patient is None:
         raise HTTPException(
@@ -139,13 +139,35 @@ def validate_appointment_relations(
             detail="Patient not found",
         )
 
-    doctor = database.get(DoctorModel, payload.doctor_id)
+    return patient
+
+def get_doctor_or_404(
+    database: Session,
+    doctor_id: int,
+) -> DoctorModel:
+    doctor = database.get(DoctorModel, doctor_id)
 
     if doctor is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Doctor not found",
         )
+
+    return doctor
+
+def validate_appointment_relations(
+    payload: AppointmentCreate | AppointmentUpdate,
+    database: Session,
+) -> None:
+    get_patient_or_404(
+        database=database,
+        patient_id=payload.patient_id,
+    )
+
+    get_doctor_or_404(
+        database=database,
+        doctor_id=payload.doctor_id,
+    )
 
     validate_appointment_interval(
         starts_at=payload.starts_at,
@@ -158,7 +180,6 @@ def validate_appointment_relations(
         starts_at=payload.starts_at,
         ends_at=payload.ends_at,
     )
-
 def appointment_overlaps(
     database: Session,
     doctor_id: int,
