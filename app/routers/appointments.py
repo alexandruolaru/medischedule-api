@@ -85,7 +85,15 @@ def validate_appointment_can_be_changed(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Completed appointment cannot be {action}",
         )   
-
+def validate_appointment_can_be_deleted(
+    appointment: AppointmentModel,
+) -> None:
+    if appointment.status == "completed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Completed appointment cannot be deleted",
+        )
+    
 def validate_appointment_relations(
     payload: AppointmentCreate | AppointmentUpdate,
     database: Session,
@@ -554,6 +562,7 @@ def complete_appointment(
         },
     },
 )
+
 def delete_appointment(
     appointment_id: int,
     database: Session = Depends(get_database_session),
@@ -566,11 +575,7 @@ def delete_appointment(
             detail="Appointment not found",
         )
 
-    if appointment.status == "completed":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Completed appointment cannot be deleted",
-        )
+    validate_appointment_can_be_deleted(appointment)
 
     database.delete(appointment)
     database.commit()
