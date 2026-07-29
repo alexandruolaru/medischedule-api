@@ -505,6 +505,7 @@ def confirm_appointment(
         },
     },
 )
+
 def complete_appointment(
     appointment_id: int,
     database: Session = Depends(get_database_session),
@@ -523,11 +524,10 @@ def complete_appointment(
             detail="Appointment is already completed",
         )
 
-    if appointment.status == "cancelled":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Cancelled appointment cannot be completed",
-        )
+    validate_appointment_can_be_changed(
+        appointment=appointment,
+        action="completed",
+    )
 
     if appointment.status != "confirmed":
         raise HTTPException(
