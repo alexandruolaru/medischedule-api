@@ -154,10 +154,10 @@ def appointment_overlaps(
     exclude_appointment_id: int | None = None,
 ) -> bool:
     query = select(AppointmentModel.id).where(
-    AppointmentModel.doctor_id == doctor_id,
-    AppointmentModel.status != "cancelled",
-    AppointmentModel.starts_at < ends_at,
-    AppointmentModel.ends_at > starts_at,
+        AppointmentModel.doctor_id == doctor_id,
+        AppointmentModel.status != "cancelled",
+        AppointmentModel.starts_at < ends_at,
+        AppointmentModel.ends_at > starts_at,
     )
 
     if exclude_appointment_id is not None:
